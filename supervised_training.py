@@ -4,6 +4,10 @@
 # calculate mean and SD, include normalization in transforms
 # (remember to normalize both train and inference transform)
 
+# data_snu_snub_train_1900normals
+# MEAN: 0.5263558626174927
+# SD  : 0.25668418407440186
+
 #%%
 import os
 import sys
@@ -32,7 +36,7 @@ import vision_transformer as vit_o
 def get_arguments():
     parser = argparse.ArgumentParser('multilabel_classification',
                                      add_help=False)
-    parser.add_argument('--data_path', default='PATH/TO/DATA',
+    parser.add_argument('--data_path', default=r'/mnt/d/data_snu_snub_train_sample',
                         help='Path to training data folder')
     parser.add_argument('--checkpoint', default = None,
                         help='Path to pretrained model checkpoint')
@@ -43,12 +47,12 @@ def get_arguments():
     parser.add_argument('--save_name', default='best.pt')
     
     # Basic hyperparameters
-    parser.add_argument('--epochs', default=15, type=int)
+    parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--device', default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-    parser.add_argument('--batch_size', default=5, type=int)
+    parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('--use_fp16', default=True, type=bool)
-    parser.add_argument('--log_interval', default=3, type=int)
+    parser.add_argument('--log_interval', default=1, type=int)
     
     # hyperparameters for schedulers
     parser.add_argument('--lr', default=0.00002, type=float)
@@ -72,7 +76,10 @@ def get_arguments():
 
 
 #%%
-def make_dataloader(args, mean=None, SD=None):
+# data_snu_snub_train_1900normals
+# MEAN: 0.5263558626174927
+# SD  : 0.25668418407440186
+def make_dataloader(args, mean=0.5263558626174927, SD=0.25668418407440186):
     if not mean or not SD:
         mean, SD = utils.calculate_mean_SD(args.data_path)
     train_transform = T.Compose([
@@ -137,7 +144,7 @@ def load_model(args, patch_size=8, out_dim=65536):
 #%%
 def train(args):
     wandb.init(project='multilabel-classification-supervized-training')
-    dataloader = make_dataloader(args)
+    dataloader = make_dataloader(args=args)
     model, optimizer, fp16_scaler = load_model(args)
     bce_loss = nn.BCEWithLogitsLoss()
     Path(args.save_dir).mkdir(parents=True, exist_ok=True)
@@ -184,17 +191,22 @@ def train(args):
 
                 
             optimizer.zero_grad()
-                        
+            
+            loss_all = 0
             for i, (_, loss) in enumerate(loss_dict.items()):
                 if not math.isfinite(loss.item()):
                     print(f"Loss is invalid: \n {loss_dict}")
                     print("Stopping training.")
                     sys.exit(1)
                     
-                if i == args.n_classes-1:
-                    fp16_scaler.scale(loss).backward()
-                else:
-                    fp16_scaler.scale(loss).backward(retain_graph=True)
+                # if i == args.n_classes-1:
+                #     fp16_scaler.scale(loss).backward()
+                # else:
+                #     fp16_scaler.scale(loss).backward(retain_graph=True)
+                
+                loss_all += loss
+            
+            fp16_scaler.scale(loss_all).backward()
         
             if args.clip_grad:
                 fp16_scaler.unscale_(optimizer)
@@ -226,7 +238,7 @@ def train(args):
 #%%
 if __name__ == '__main__':
     parser = get_arguments()
-    args = parser.parse_args()
+    args = parser.parse_args("")
     wandb.login()
     train(args)
 # %%
